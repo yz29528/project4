@@ -19,7 +19,7 @@ struct inode_disk
   unsigned magic;       /* Magic number. */
   bool is_symlink;      /* True if symbolic link, false otherwise. */
   bool is_directory;    /* True if directory, false otherwise. */
-  uint8_t unused[498]; /* Not used. */
+  uint8_t unused[498];  /* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
