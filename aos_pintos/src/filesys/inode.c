@@ -7,7 +7,6 @@
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
-#include "cache.h"
 
 
 /* Identifies an inode. */
@@ -184,7 +183,7 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
         }
         //extend_file(inode,pos,tier2_table,tier2_table);
         inode->data.length = pos + 1;
-        block_write(fs_device,inode->sector, &inode->data);
+        cache_write(fs_device,inode->sector, &inode->data);
     }
 
     /*
@@ -232,9 +231,7 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
     //printf("__pos:%d___sector is__%d___\n",pos,sector);
     free(tier1_table);
     free(tier2_table);
-
     return sector;
-
 }
 
 /* List of open inodes, so that opening a single inode twice
@@ -272,7 +269,7 @@ bool inode_create (block_sector_t sector, off_t length)
       disk_inode->is_directory = false;
       //disk_inode->table = NULL_SECTOR;
       if (free_map_allocate(1, &disk_inode->table)) {
-          block_write(fs_device, sector, disk_inode);
+          cache_write(fs_device, sector, disk_inode);
 
 
           if (length > 0) {
@@ -360,7 +357,7 @@ struct inode *inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-  block_read (fs_device, inode->sector, &inode->data);
+  cache_read (fs_device, inode->sector, &inode->data);
   return inode;
 }
 
@@ -596,5 +593,5 @@ bool inode_get_symlink (struct inode *inode) {
 void inode_set_symlink (struct inode *inode, bool is_symlink)
 {
   inode->data.is_symlink = is_symlink;
-  block_write (fs_device, inode->sector, &inode->data);
+  cache_write (fs_device, inode->sector, &inode->data);
 }
