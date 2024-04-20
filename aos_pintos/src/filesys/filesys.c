@@ -6,6 +6,7 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "threads/thread.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -37,13 +38,18 @@ void filesys_done (void) { free_map_close (); }
    Returns true if successful, false otherwise.
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
-bool filesys_create (const char *name, off_t initial_size)
+bool filesys_create (const char *name, off_t initial_size, bool is_dir)
 {
   block_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
+
+  char directory[strlen(name)];
+  char file_name[strlen(name)];
+  split_path_filename(name, directory, file_name);
+  struct dir *dir = dir_open_path(directory);
+
   bool success = (dir != NULL && free_map_allocate (1, &inode_sector) &&
-                  inode_create (inode_sector, initial_size) &&
-                  dir_add (dir, name, inode_sector));
+                  inode_create (inode_sector, initial_size, is_dir) &&
+                  dir_add (dir, name, inode_sector, is_dir));
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
 
@@ -59,15 +65,30 @@ bool filesys_create (const char *name, off_t initial_size)
    or if an internal memory allocation fails. */
 struct file *filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  int path_length = strlen(name);
+  if (path_length == 0) return NULL;
+
+  char directory[path_length + 1];
+  char file_name[path_length + 1];
+  split_path_filename(name, directory, file_name);
+  struct dir *dir = dir_open_path (directory);
+
   struct inode *inode = NULL;
 
-  if (dir != NULL)
-    dir_lookup (dir, name, &inode);
-  dir_close (dir);
-
-  if (inode == NULL)
+  if (dir == NULL) {
     return NULL;
+  }
+
+  if (strlen(file_name) > 0) {
+    dir_lookup(dir, file_name, &inode);
+    dir_close(dir);
+  } else { // Filename is empty, just return the directory
+    inode = dir_get_inode(dir);
+  }
+
+  if (inode == NULL || inode_is_removed(inode)) {
+    return NULL;
+  }
 
   if (inode_get_symlink (inode))
     {
@@ -90,7 +111,11 @@ struct file *filesys_open (const char *name)
    or if an internal memory allocation fails. */
 bool filesys_remove (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  char directory[strlen(name)];
+  char file_name[strlen(name)];
+  split_path_filename(name, directory, file_name);
+  struct dir *dir = dir_open_path (directory);
+
   bool success = dir != NULL && dir_remove (dir, name);
   dir_close (dir);
 
@@ -103,12 +128,26 @@ bool filesys_remove (const char *name)
 bool filesys_symlink (char *target, char *linkpath)
 {
   ASSERT (target != NULL && linkpath != NULL);
-  bool success = filesys_create (linkpath, 15);
+  bool success = filesys_create (linkpath, 15, false);
   struct file *symlink = filesys_open (linkpath);
   inode_set_symlink (file_get_inode (symlink), true);
   inode_write_at (file_get_inode (symlink), target, NAME_MAX + 1, 0);
   file_close (symlink);
   return success;
+}
+
+/* Change CWD for the current thread. */
+bool filesys_chdir (const char *path) {
+  struct dir *dir = dir_open_path(path);
+
+  if (dir == NULL) {
+    return false;
+  }
+
+  dir_close(thread_current()->cwd);
+  thread_current()->cwd = dir;
+
+  return true;
 }
 
 /* Formats the file system. */

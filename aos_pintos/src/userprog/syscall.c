@@ -24,6 +24,9 @@
 
 static void syscall_handler (struct intr_frame *);
 static bool valid_ptr (void *);
+static void check_user(const uint8_t *uaddr);
+static int32_t get_user(const uint8_t *uaddr);
+static void fail_invalid_access(void);
 
 static struct semaphore filesys_mutex; // Ensure mutual exclusion to filesys
 
@@ -174,6 +177,50 @@ static void syscall_handler (struct intr_frame *f UNUSED)
         char *linkpath = *((char **) f->esp + 2);
         f->eax = symlink (target, linkpath);
         break;
+      case SYS_CHDIR:
+        if (check_args (f->esp, 1)) {
+          exit(-1);
+        }
+        char *to_dir = *((char **) f->esp + 1);
+        f->eax = chdir (to_dir);
+        break;
+      case SYS_MKDIR:
+        if (check_args (f->esp, 1)) {
+          exit(-1);
+        }
+        char *dir_to_make = *((char **) f->esp + 1);
+        f->eax = mkdir (dir_to_make);
+        break;
+      case SYS_READDIR:
+        if (check_args (f->esp, 2)) {
+          exit(-1);
+        }
+        int fd_readdir = *((int *) f->esp + 1);
+        char *name = *((char **) f->esp + 2);
+        f->eax = readdir (fd_readdir, name);
+        break;
+      case SYS_ISDIR:
+        if (check_args (f->esp, 1)) {
+          exit(-1);
+        }
+        int fd_isdir = *((int *) f->esp + 1);
+        f->eax = isdir (fd_isdir);
+        break;
+      case SYS_INUMBER:
+        if (check_args (f->esp, 1)) {
+          exit(-1);
+        }
+        int fd_inumber = *((int *) f->esp + 1);
+        f->eax = inumber (fd_inumber);
+        break;
+      case SYS_STAT:
+        if (check_args (f->esp, 2)) {
+          exit(-1);
+        }
+        char *pathname = *((char **) f->esp + 1);
+        void *buffer = *((void **) f->esp + 2);
+        f->eax = stat (pathname, buffer);
+        break;
     }
 }
 
@@ -263,7 +310,7 @@ bool create (const char *file, unsigned initial_size)
     }
 
   sema_down (&filesys_mutex);
-  bool opened = filesys_create (file, initial_size);
+  bool opened = filesys_create (file, initial_size, false);
   sema_up (&filesys_mutex);
 
   return opened;
@@ -460,4 +507,115 @@ bool valid_ptr (void *ptr)
 {
   return ptr && !is_kernel_vaddr (ptr) &&
          pagedir_get_page (thread_current ()->pagedir, ptr);
+}
+
+/* Change the current directory. */
+bool chdir (char *dir) {
+  bool return_code;
+  check_user((const uint8_t*) dir);
+
+  sema_down (&filesys_mutex);
+  return_code = filesys_chdir(dir);
+  sema_up (&filesys_mutex);
+
+  return return_code; 
+}
+
+/* Create a directory. */
+bool mkdir (char *dir) {
+  bool return_code;
+  check_user((const uint8_t*) dir);
+
+  sema_down (&filesys_mutex);
+  return_code = filesys_create(dir, 0, true);
+  sema_up (&filesys_mutex);
+
+  return return_code;
+}
+
+/* Reads a directory entry. */
+bool readdir (int fd, char *name) {
+  bool retval = false;
+
+  sema_down(&filesys_mutex);
+  struct file **fds = thread_current()->fd_table;
+  struct file *curr = fds[fd];
+
+  if (curr == NULL) {
+    goto done;
+  }
+
+  struct inode *inode = file_get_inode(curr);
+  if (inode == NULL || !inode_is_directory(inode)) {
+    goto done;
+  }
+
+  struct dir *directory = dir_open(inode_reopen(inode));
+
+  ASSERT (directory != NULL);
+  retval = dir_readdir(directory, name);
+
+done:
+  sema_up(&filesys_mutex);
+  return retval;
+}
+
+/* Tests if a fd represents a directory. */
+bool isdir (int fd) {
+  // sema_down (&filesys_mutex);
+  struct file **fds = thread_current()->fd_table;
+  struct file *curr = fds[fd];
+  bool retval = inode_is_directory(curr);
+  // sema_up (&filesys_mutex);
+
+  return retval;
+}
+
+/* Returns the inode number for a fd. */
+int inumber (int fd) {
+  // sema_down (&filesys_mutex);
+  struct file **fds = thread_current()->fd_table;
+  struct file *curr = fds[fd];
+  int retval = (int)inode_get_inumber(file_get_inode(curr));
+  // sema_up (&filesys_mutex);
+
+  return retval;
+}
+
+/* Returns information about a file */
+int stat (char *pathname, void *buffer) {
+  // TODO
+  return -1;
+}
+
+static void check_user(const uint8_t *uaddr) {
+  if (get_user(uaddr) == -1) {
+    fail_invalid_access();
+  }
+}
+
+/**
+ * Reads a single 'byte' at user memory admemory at 'uaddr'.
+ * 'uaddr' must be below PHYS_BASE.
+ *
+ * Returns the byte value if successful (extract the least significant byte),
+ * or -1 in case of error (a segfault occurred or invalid uaddr)
+ */
+static int32_t get_user(const uint8_t *uaddr) {
+  // Verify `uaddr` points below PHYS_BASE
+  if (!((void*)uaddr < PHYS_BASE)) {
+    return -1;
+  }
+
+  int result;
+  asm ("movl $1f, %0; movzbl %1, %0; 1:"
+      : "=&a" (result) : "m" (*uaddr));
+  return result;
+}
+
+static void fail_invalid_access(void) {
+  sema_up(&filesys_mutex);
+
+  exit(-1);
+  NOT_REACHED();
 }

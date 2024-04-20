@@ -19,5 +19,11 @@ void seek (int, unsigned);
 unsigned tell (int);
 void close (int);
 int symlink (char *, char *);
+bool chdir (char *dir);
+bool mkdir (char *dir);
+bool readdir (int fd, char *name);
+bool isdir (int fd);
+int inumber (int fd);
+int stat (char *pathname, void *buffer);
 
 #endif /* userprog/syscall.h */
