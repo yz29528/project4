@@ -17,6 +17,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/inode.h"
+#include "filesys/directory.h"
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "devices/input.h"
@@ -566,7 +567,7 @@ bool isdir (int fd) {
   // sema_down (&filesys_mutex);
   struct file **fds = thread_current()->fd_table;
   struct file *curr = fds[fd];
-  bool retval = inode_is_directory(curr);
+  bool retval = inode_is_directory(file_get_inode(curr));
   // sema_up (&filesys_mutex);
 
   return retval;

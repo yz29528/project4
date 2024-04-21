@@ -74,6 +74,13 @@ static void start_process (void *filename)
     palloc_free_page (filename);
 
   thread_current ()->parent->success = success;
+
+  if (thread_current()->parent->cwd != NULL) {
+    thread_current()->cwd = dir_reopen(thread_current()->parent->cwd);
+  } else {
+    thread_current()->cwd = dir_open_root();
+  }
+
   sema_up (&thread_current ()->parent->child_created);
 
   /* If load failed, quit. */
@@ -135,6 +142,10 @@ void process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  if (cur->cwd) {
+    dir_close(cur->cwd);
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
