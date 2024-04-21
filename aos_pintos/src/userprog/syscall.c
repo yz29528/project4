@@ -589,16 +589,20 @@ int stat (char *pathname, void *buffer) {
   struct stat *stat_buffer = (struct stat *)buffer;
 
   sema_down(&filesys_mutex);
-  struct file *curr = filesys_open(pathname);
+  struct file *curr = filesys_open(pathname); // This resets the pos back to 0
   sema_up(&filesys_mutex);
 
   if (curr == NULL) {
     return -1; // Unable to open the file at the given pathname
   }
+
+  // TODO: Figure out a way to get the number of bytes written to the file
+  // This is different than the length of the inode!!
+  off_t bytes_written = 0;
   
-  int num_blocks = DIV_ROUND_UP(inode_length(curr->inode), BLOCK_SECTOR_SIZE);
+  int num_blocks = DIV_ROUND_UP(bytes_written, BLOCK_SECTOR_SIZE);
   stat_buffer->logical_size = inode_length(curr->inode);
-  stat_buffer->physical_size = num_blocks * 512; // Converting blocks to bytes
+  stat_buffer->physical_size = bytes_written; // This should be the number of bytes written
   stat_buffer->inode_number = inode_get_inumber(curr->inode);
   stat_buffer->blocks = num_blocks;
 

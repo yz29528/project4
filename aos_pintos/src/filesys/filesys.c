@@ -66,7 +66,9 @@ bool filesys_create (const char *name, off_t initial_size, bool is_dir)
 struct file *filesys_open (const char *name)
 {
   int path_length = strlen(name);
-  if (path_length == 0) return NULL;
+  if (path_length == 0) {
+    return NULL;
+  }
 
   char directory[path_length + 1];
   char file_name[path_length + 1];
