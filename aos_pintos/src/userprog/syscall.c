@@ -21,6 +21,7 @@
 #include "threads/flags.h"
 #include "devices/input.h"
 #include "devices/block.h"
+#include <round.h>
 
 static void syscall_handler (struct intr_frame *);
 static bool valid_ptr (void *);
@@ -584,8 +585,23 @@ int inumber (int fd) {
 
 /* Returns information about a file */
 int stat (char *pathname, void *buffer) {
-  // TODO
-  return -1;
+  struct stat *stat_buffer = (struct stat *)buffer;
+
+  sema_down(&filesys_mutex);
+  struct file *curr = filesys_open(pathname);
+  sema_up(&filesys_mutex);
+
+  if (curr == NULL) {
+    return -1; // Unable to open the file at the given pathname
+  }
+  
+  int num_blocks = DIV_ROUND_UP(inode_length(curr->inode), BLOCK_SECTOR_SIZE);
+  stat_buffer->logical_size = inode_length(curr->inode);
+  stat_buffer->physical_size = num_blocks * 512; // Converting blocks to bytes
+  stat_buffer->inode_number = inode_get_inumber(curr->inode);
+  stat_buffer->blocks = num_blocks;
+
+  return 0;
 }
 
 static void check_user(const uint8_t *uaddr) {
