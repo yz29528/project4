@@ -22,6 +22,8 @@ struct dir_entry
   bool in_use;                 /* In use or free? */
 };
 
+bool continue_traversal(char *full_path, char *token);
+
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool dir_create (block_sector_t sector, size_t entry_cnt)
@@ -37,6 +39,7 @@ bool dir_create (block_sector_t sector, size_t entry_cnt)
   ASSERT (dir != NULL);
   struct dir_entry e;
   e.inode_sector = sector;
+  e.in_use = false; // not in use upon creation
   if (inode_write_at(dir->inode, &e, sizeof e, 0) != sizeof e) {
     success = false;
   }
@@ -53,7 +56,8 @@ struct dir *dir_open (struct inode *inode)
   if (inode != NULL && dir != NULL)
     {
       dir->inode = inode;
-      dir->pos = 0;
+      // pos accomodates for parent dir
+      dir->pos = sizeof(struct dir_entry);
       return dir;
     }
   else
@@ -93,8 +97,10 @@ struct dir *dir_open_path(const char *path) {
 
   // Tokenize and traverse the directory tree
   char *token, *p;
-  for (token = strtok_r(s, "/", &p); token != NULL; token = strtok_r(NULL, "/", &p)) {
+  // printf("Full input path s is %s. Curr is ", s, curr);
+  while (continue_traversal(path, token)){
     struct inode *inode = NULL;
+
     if(! dir_lookup(curr, token, &inode)) {
       dir_close(curr);
       return NULL; // directory doesn't exist
@@ -116,6 +122,32 @@ struct dir *dir_open_path(const char *path) {
   }
 
   return curr;
+}
+
+/*
+Idea: copy over full_path to token character by character
+*/
+bool continue_traversal(char *full_path, char *token){
+  // ignore starting '/' values
+  int chars_to_skip = strspn(full_path, "/");
+  full_path += chars_to_skip;
+
+  // have we reached end of filepath already?
+  if (*full_path == '\0'){
+    // printf("Only empty string left\n");
+    return false;
+  }
+
+  int i = 0; // iterator counter
+
+  // copy chars to token until we hit next '/' or end of string
+  while (*full_path != '\0' && full_path != '/'){
+    token[i++] = *full_path++; 
+  }
+
+  token[i] = '\0'; // ensure we have a trailing end char
+
+  return true;
 }
 
 /* Opens and returns a new directory for the same inode as DIR.
@@ -262,9 +294,11 @@ bool dir_add (struct dir *dir, const char *name, block_sector_t inode_sector, bo
   e.in_use = true;
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
+  // printf("pre-write success? %s", success ? "true" : "false");
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
 done:
+  // printf("success? %s", success ? "true" : "false");
   return success;
 }
 

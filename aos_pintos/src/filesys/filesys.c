@@ -50,11 +50,19 @@ bool filesys_create (const char *name, off_t initial_size, bool is_dir)
   split_path_filename(name, directory, file_name);
   struct dir *dir = dir_open_path(directory);
 
+  /*
+  printf("name is %s directory is %s file name is %s", name, directory, file_name);
+  printf("Is directory value: %s\n", is_dir  ? "true" : "false");
+  printf("Is directory NULL? %s\n", dir == NULL ? "true":"false");
+  */
+
   bool success = (dir != NULL && free_map_allocate (1, &inode_sector) &&
                   inode_create (inode_sector, initial_size, is_dir) &&
                   dir_add (dir, name, inode_sector, is_dir));
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
+
+  // printf("Is success? %s\n", success ? "true":"false");
 
   dir_close (dir);
 
