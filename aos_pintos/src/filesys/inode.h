@@ -4,8 +4,21 @@
 #include <stdbool.h>
 #include "filesys/off_t.h"
 #include "devices/block.h"
-
+#include "lib/kernel/list.h"
+#include "lib/kernel/hash.h"
 struct bitmap;
+
+struct cache_entry{
+    block_sector_t sector;
+    char buffer[BLOCK_SECTOR_SIZE];
+    struct hash_elem he;
+    struct list_elem le;
+};
+
+void cache_init (void);
+void cache_read (struct block *block, block_sector_t sector, void *buffer);
+void cache_write (struct block *block, block_sector_t sector, void *buffer);
+void cache_done (void);
 
 void inode_init (void);
 bool inode_create (block_sector_t, off_t, bool);
