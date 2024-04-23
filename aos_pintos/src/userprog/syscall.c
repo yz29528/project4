@@ -596,13 +596,11 @@ int stat (char *pathname, void *buffer) {
     return -1; // Unable to open the file at the given pathname
   }
 
-  // TODO: Figure out a way to get the number of bytes written to the file
-  // This is different than the length of the inode!!
-  off_t bytes_written = 0;
+  off_t bytes_written = inode_bytes_written(curr->inode);
   
   int num_blocks = DIV_ROUND_UP(bytes_written, BLOCK_SECTOR_SIZE);
   stat_buffer->logical_size = inode_length(curr->inode);
-  stat_buffer->physical_size = bytes_written; // This should be the number of bytes written
+  stat_buffer->physical_size = bytes_written;
   stat_buffer->inode_number = inode_get_inumber(curr->inode);
   stat_buffer->blocks = num_blocks;
 

@@ -152,6 +152,7 @@ struct inode
   int open_cnt;           /* Number of openers. */
   bool removed;           /* True if deleted, false otherwise. */
   int deny_write_cnt;     /* 0: writes ok, >0: deny writes. */
+  uint32_t bytes_written;
   struct inode_disk data; /* Inode content. */
 };
 block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write);
@@ -356,6 +357,7 @@ struct inode *inode_open (block_sector_t sector)
   inode->sector = sector;
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
+  inode->bytes_written = 0;
   inode->removed = false;
   cache_read (fs_device, inode->sector, &inode->data);
   return inode;
@@ -561,7 +563,13 @@ off_t inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     }
   free (bounce);
 
+  inode->bytes_written += bytes_written;
+
   return bytes_written;
+}
+
+off_t inode_bytes_written (struct inode *inode) {
+  return inode->bytes_written;
 }
 
 /* Disables writes to INODE.

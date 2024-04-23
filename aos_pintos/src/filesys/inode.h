@@ -36,5 +36,6 @@ bool inode_get_symlink (struct inode *inode);
 void inode_set_symlink (struct inode *inode, bool is_symlink);
 bool inode_is_directory (const struct inode *inode);
 bool inode_is_removed (const struct inode *inode);
+off_t inode_bytes_written (struct inode *inode);
 
 #endif /* filesys/inode.h */

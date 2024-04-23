@@ -79,15 +79,15 @@ struct dir *dir_open_path(const char *path) {
   strlcpy(s, path, path_length + 1);
 
   // Handle relative paths
-  struct dir *curr;
+  struct dir *directory;
   if (path[0] == '/') { // Path is an absolute path
-    curr = dir_open_root();
+    directory = dir_open_root();
   } else {
     struct thread *t = thread_current();
     if (t->cwd == NULL) { // This may happen for non-process threads (main)
-      curr = dir_open_root();
+      directory = dir_open_root();
     } else {
-      curr = dir_reopen(t->cwd);
+      directory = dir_reopen(t->cwd);
     }
   }
 
@@ -95,27 +95,30 @@ struct dir *dir_open_path(const char *path) {
   char *token, *p;
   for (token = strtok_r(s, "/", &p); token != NULL; token = strtok_r(NULL, "/", &p)) {
     struct inode *inode = NULL;
-    if(! dir_lookup(curr, token, &inode)) {
-      dir_close(curr);
+    if(! dir_lookup(directory, token, &inode)) {
+      dir_close(directory);
       return NULL; // directory doesn't exist
     }
 
     struct dir *next = dir_open(inode);
     if (next == NULL) {
-      dir_close(curr);
+      dir_close(directory);
       return NULL;
     }
-    dir_close(curr);
-    curr = next;
+
+    // if (inode_is_directory(next->inode)) {
+      dir_close(directory);
+      directory = next;
+    // }
   }
 
   // Prevent opening removed directories
-  if (inode_is_removed(dir_get_inode(curr))) {
-    dir_close(curr);
+  if (inode_is_removed(dir_get_inode(directory))) {
+    dir_close(directory);
     return NULL;
   }
 
-  return curr;
+  return directory;
 }
 
 /* Opens and returns a new directory for the same inode as DIR.
