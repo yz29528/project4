@@ -392,6 +392,11 @@ int read (int fd, void *buffer, unsigned size)
     {
       return 0;
     }
+
+  if (inode_is_directory(file->inode)) {
+    return -1;
+  }
+  
   unsigned bytes_read = 0;
 
   // Read from stdin
@@ -434,6 +439,10 @@ int write (int fd, const void *buffer, unsigned size)
     {
       return 0;
     }
+
+  if (inode_is_directory(file->inode)) {
+    return -1;
+  }
 
   sema_down (&filesys_mutex);
   unsigned bytes_written = file_write (file, buffer, size);
