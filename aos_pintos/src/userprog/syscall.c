@@ -359,6 +359,13 @@ int open (const char *filename)
       return -1;
     }
 
+  struct inode *inode = file_get_inode(file);
+  if (inode != NULL && inode_is_directory(inode)) {
+    file->dir = dir_open(inode_reopen(inode));
+  } else {
+    file->dir = NULL;
+  }
+
   fds[fd] = file;
   return fd;
 }
@@ -396,7 +403,7 @@ int read (int fd, void *buffer, unsigned size)
   if (inode_is_directory(file->inode)) {
     return -1;
   }
-  
+
   unsigned bytes_read = 0;
 
   // Read from stdin
@@ -550,21 +557,24 @@ bool readdir (int fd, char *name) {
 
   sema_down(&filesys_mutex);
   struct file **fds = thread_current()->fd_table;
-  struct file *curr = fds[fd];
+  struct file *f = fds[fd];
 
-  if (curr == NULL) {
+  if (f == NULL) {
     goto done;
   }
 
-  struct inode *inode = file_get_inode(curr);
+  struct inode *inode = file_get_inode(f);
   if (inode == NULL || !inode_is_directory(inode)) {
     goto done;
   }
 
-  struct dir *directory = dir_open(inode_reopen(inode));
+  ASSERT(f->dir != NULL);
 
-  ASSERT (directory != NULL);
-  retval = dir_readdir(directory, name);
+  if (dir_is_empty(f->dir)) {
+    goto done;
+  }
+
+  retval = dir_readdir(f->dir, name);
 
 done:
   sema_up(&filesys_mutex);

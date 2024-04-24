@@ -240,6 +240,7 @@ bool dir_add (struct dir *dir, const char *name, block_sector_t inode_sector, bo
     }
 
     // e is the parent directory entry
+    e.in_use = false;
     e.inode_sector = inode_get_inumber(dir_get_inode(dir));
 
     if (inode_write_at(child_dir->inode, &e, sizeof e, 0) != sizeof e) {

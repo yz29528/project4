@@ -12,6 +12,7 @@ struct file
   struct inode *inode; /* File's inode. */
   off_t pos;           /* Current position. */
   bool deny_write;     /* Has file_deny_write() been called? */
+  struct dir *dir;     /* If this file is a directory and has been opened, this won't be NULL */
 };
 
 /* Opening and closing files. */
