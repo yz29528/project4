@@ -127,16 +127,17 @@ struct file* ret=NULL;
        //dir_print_dir(sup_dir);
       ret->dir=dir_open_root();
     return ret;
-  }else if(parse_path(name, &sup_dir, &file_name, &is_directory)){
-
-            //dir_print_dir(sup_dir);
-      //printf("__open_path is__%s___name is_%s_\n",name,file_name);
-            struct dir *tmp_dir=dir_open_subdir(sup_dir, file_name);
+  }
+  else if(parse_path(name, &sup_dir, &file_name, &is_directory)){
+    // dir_print_dir(sup_dir);
+    // printf("__open_path is__%s___name is_%s_\n",name,file_name);
+    struct dir *tmp_dir=dir_open_subdir(sup_dir, file_name);
     if (tmp_dir!=NULL){
        ret=file_open(inode_reopen(dir_get_inode(tmp_dir)));
        ret->dir=dir_open(dir_get_inode(tmp_dir));
        dir_close(tmp_dir);
-    }else{
+    }
+    else {
         ret=dir_open_subfile(sup_dir, file_name);
         if(is_directory)
             ret = NULL;
