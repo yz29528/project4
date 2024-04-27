@@ -5,7 +5,9 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
-
+#include "threads/thread.h"
+#include "filesys/file.h"
+#define MIN_ENTRY 2
 /* A directory. */
 struct dir
 {
@@ -25,7 +27,18 @@ struct dir_entry
    given SECTOR.  Returns true if successful, false on failure. */
 bool dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+    bool success = inode_create (sector, (MIN_ENTRY + entry_cnt) * sizeof (struct dir_entry));
+    struct inode* inode=inode_open (sector);
+    if(success&&inode != NULL)
+    {
+        inode_set_directory(inode);
+        struct dir *dir= dir_open (inode);
+        ASSERT (dir_add(dir, ".", sector));
+        // update it when put the dir tin another dir
+        ASSERT (dir_add(dir, "..", sector));
+        dir_close(dir);
+    }
+    return success;
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -79,9 +92,7 @@ struct inode *dir_get_inode (struct dir *dir) { return dir->inode; }
    if EP is non-null, and sets *OFSP to the byte offset of the
    directory entry if OFSP is non-null.
    otherwise, returns false and ignores EP and OFSP. */
-static bool lookup (const struct dir *dir, const char *name,
-                    struct dir_entry *ep, off_t *ofsp)
-{
+static bool lookup (const struct dir *dir, const char *name, struct dir_entry *ep, off_t *ofsp){
   struct dir_entry e;
   size_t ofs;
 
@@ -161,6 +172,21 @@ bool dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
+  if (success && inode_sector != inode_get_inumber(dir->inode)){
+        struct inode* inode = inode_open (inode_sector);
+        ASSERT (inode != NULL);
+
+        //Set the super directory of the sub directcory.
+        if(inode_get_directory(inode)){
+            struct dir *sub_dir = dir_open (inode);
+            lookup (sub_dir, "..", &e, &ofs);
+            e.inode_sector = inode_get_inumber(dir->inode);
+            inode_write_at(sub_dir->inode, &e, sizeof e, ofs);
+            dir_close (sub_dir);
+        }else{
+            inode_close (inode);
+        }
+    }
 done:
   return success;
 }
@@ -211,7 +237,7 @@ bool dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e)
     {
       dir->pos += sizeof e;
-      if (e.in_use)
+      if (e.in_use&&(strcmp (e.name,".." )!=0 && strcmp (e.name,"." )!=0))
         {
           strlcpy (name, e.name, NAME_MAX + 1);
           return true;
@@ -219,3 +245,146 @@ bool dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
     }
   return false;
 }
+bool dir_print_dir (struct dir *dir )
+{
+    struct dir *dir_copy = dir_open(dir->inode);
+    struct dir_entry e;
+    char name[NAME_MAX + 1];
+    while (dir_readdir(dir_copy,name))
+    {
+       printf("__dir_print_dir__%s__________\n",name);
+    }
+    free(dir_copy);
+    return false;
+}
+//dir_create just create a dir with .. and .  by sector.
+//we create a dir  and put it in cur_dir
+static bool create_file_or_dir(struct dir* cur_dir, char* name,bool is_directory ,off_t initial_size UNUSED){
+    ASSERT(cur_dir != NULL&&name != NULL);
+    if (strlen(name) == 0)
+        return false;
+    block_sector_t sector = NULL_SECTOR;
+
+    bool success;
+    if(is_directory) {
+        success = free_map_allocate(1, &sector)
+                   && dir_create(sector, 0)
+                   && dir_add(cur_dir, name, sector);
+    }else {
+        success = free_map_allocate(1, &sector)
+                   && inode_create(sector, initial_size)
+                   && dir_add(cur_dir, name, sector);
+    }
+    if (!success && sector != NULL_SECTOR)
+        free_map_release(sector, 1);
+    return success;
+}
+
+bool dir_create_subdir(struct dir* cur_dir, char* name){
+    return create_file_or_dir(cur_dir,name,true ,0);
+}
+
+bool dir_create_subfile(struct dir* cur_dir, char* name, off_t initial_size){
+    return create_file_or_dir(cur_dir,name, false ,initial_size);
+}
+
+
+struct file* dir_open_subfile(struct dir* cur_dir, char* name){
+    ASSERT(cur_dir != NULL&&name != NULL)
+    if (strlen(name) == 0)
+        return NULL;
+    struct inode* inode = NULL;
+    if (!dir_lookup(cur_dir, name, &inode) || inode == NULL)
+        return NULL;
+
+
+    if (inode_get_directory(inode)){
+        inode_close(inode);
+        return NULL;
+    }
+    return  file_open(inode);
+}
+
+struct dir* dir_open_subdir(struct dir* cur_dir, char* name){
+    ASSERT(cur_dir != NULL&&name != NULL)
+    if (strlen(name) == 0)
+        return NULL;
+    struct inode* inode = NULL;
+    if (!dir_lookup(cur_dir, name, &inode) || inode == NULL)
+        return NULL;
+
+//printf("try to open subdir %s \n",name);
+    if (!inode_get_directory(inode)){
+        inode_close(inode);
+        //printf("subdir is not a dir: %s \n",name);
+        return NULL;
+    }
+    return dir_open(inode);
+}
+
+bool dir_is_empty (struct dir *dir )
+{
+    struct dir_entry e;
+    while (inode_read_at(dir->inode, &e, sizeof e, dir->pos) == sizeof e)
+    {
+        dir->pos += sizeof e;
+        if (e.in_use&&(strcmp (e.name,"." )!=0 && strcmp (e.name,".." )!=0))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+//check
+bool dir_check_and_remove(struct dir* cur_dir, char* name){
+    ASSERT(cur_dir != NULL&&name != NULL && strlen(name) >= 0)
+    struct inode* inode = NULL;
+
+    bool debug= true;
+
+    if (!dir_lookup(cur_dir, name, &inode)){
+        if(debug)printf("__!dir_lookup(cur_dir, name, &inode)r______________\n");
+        return false;
+    }
+    if (inode == NULL) {
+
+        if(debug)printf("__inode == NULL)_______\n");
+        return false;
+    }
+    if (inode->open_cnt>1) {
+
+        if(debug)printf("__inode->open_cnt>0_______\n");
+        return false;
+    }
+    if (inode_get_directory(inode)) {
+        if(debug)printf("__remove adir_______%s_______\n",name);
+
+        //If you want to delete a dir the dir should not be cur dir
+        if (inode_get_inumber(inode) ==
+                inode_get_inumber(dir_get_inode(thread_current()->cur_dir)))
+            //||inode_get_opencnt(inode) > 1
+        {
+            if(debug)printf("__If you want to delete a dir the dir should not be cur dir______________\n");
+            inode_close(inode);
+            return false;
+        }
+        //If you want to delete a dir ,the dir should be empty.
+        // otherwise you should delete sub file at first .
+
+        struct dir *dir_copy = dir_open(inode);
+        if(debug)dir_print_dir(dir_copy);
+        bool is_empty=dir_is_empty(dir_copy);
+        dir_close(dir_copy);
+
+        if(!is_empty) {
+            if(debug)printf("____rmpty________\n");
+            return false;
+        }
+    }else{
+        if(debug)printf("__remove a file______________\n");
+        inode_close(inode);
+    }
+    return dir_remove(cur_dir, name);
+}
+

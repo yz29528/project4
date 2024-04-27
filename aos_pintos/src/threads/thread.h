@@ -5,7 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
-
+#include "filesys/directory.h"
 /* States in a thread's life cycle. */
 enum thread_status
 {
@@ -108,7 +108,9 @@ struct thread
   /* Owned by userprog/process.c. */
   uint32_t *pagedir; /* Page directory. */
 #endif
-
+#ifdef FILESYS
+    struct dir *cur_dir;
+#endif
   /* Owned by thread.c. */
   unsigned magic; /* Detects stack overflow. */
 };
@@ -148,5 +150,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
+void thread_set_initial_thread_dir();
 #endif /* threads/thread.h */

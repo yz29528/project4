@@ -200,6 +200,10 @@ tid_t thread_create (const char *name, int priority, thread_func *function,
 
   t->parent = thread_current (); // Creating thread is parent of new thread
 
+#ifdef FILESYS
+  t->cur_dir = thread_current()->cur_dir;
+#endif
+
   // Add new thread to children struct of parent
   struct child *child = malloc (sizeof (struct child));
   child->child_thread = t;
@@ -574,3 +578,7 @@ static tid_t allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+void thread_set_initial_thread_dir() {
+    initial_thread->cur_dir=dir_open_root();
+}

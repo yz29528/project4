@@ -16,6 +16,7 @@
 #include "lib/string.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/directory.h"
 #include "filesys/inode.h"
 #include "userprog/gdt.h"
 #include "threads/flags.h"
@@ -174,7 +175,164 @@ static void syscall_handler (struct intr_frame *f UNUSED)
         char *linkpath = *((char **) f->esp + 2);
         f->eax = symlink (target, linkpath);
         break;
+        case SYS_MKDIR:
+            if (check_args (f->esp, 1))
+            {
+                exit (-1);
+            }
+            char *dir1 = *((char **) f->esp + 1);
+            //printf("f->eax = mkdir (dir1)__________________\n");
+            f->eax = mkdir (dir1);
+            break;
+        case SYS_CHDIR:
+            if (check_args (f->esp, 1))
+            {
+                exit (-1);
+            }
+            char *dir2 = *((char **) f->esp + 1);
+            f->eax = chdir (dir2);
+            break;
+        case SYS_READDIR:
+            if (check_args (f->esp, 2))
+            {
+                exit (-1);
+            }
+            int fd_readdir = *((int *) f->esp + 1);
+            char *name_readdir = *((char **) f->esp + 2);
+            f->eax = readdir(fd_readdir,name_readdir);
+            break;
+        case SYS_ISDIR:
+            if (check_args (f->esp, 1))
+            {
+                exit (-1);
+            }
+            int fd_isdir = *((int *) f->esp + 1);
+            f->eax = isdir(fd_isdir);
+            break;
+        case SYS_INUMBER:
+            if (check_args (f->esp, 1))
+            {
+                exit (-1);
+            }
+            int fd_inumber = *((int *) f->esp + 1);
+            f->eax = inumber(fd_inumber);
+            break;
     }
+}
+
+bool isdir (int fd){
+    if (fd >= MAX_OPEN_FILES || fd == 1||fd==2 || fd < 0)
+    {
+        return false;
+    }
+    struct file **fds = thread_current ()->fd_table;
+    if (fds[fd] == NULL)
+    {
+        return false;
+    }
+    sema_down (&filesys_mutex);
+    bool suc=inode_get_directory(file_get_inode(fds[fd]));
+    sema_up (&filesys_mutex);
+    return suc;
+}
+
+int inumber (int fd){
+    if (fd >= MAX_OPEN_FILES || fd == 1||fd==2 || fd < 0)
+    {
+        return false;
+    }
+    struct file **fds = thread_current ()->fd_table;
+    if (fds[fd] == NULL)
+    {
+        return false;
+    }
+    sema_down (&filesys_mutex);
+    int ret=inode_get_sector(file_get_inode(fds[fd]));
+    sema_up (&filesys_mutex);
+    return ret;
+}
+
+int stat (char *pathname, void *buf){
+
+
+    return -1;
+}
+
+
+
+bool readdir (int fd,char *name){
+    //printf("_______1________\n");
+    if (fd >= MAX_OPEN_FILES ||  fd < 0)
+    {
+        printf("___fd id is %d ___",fd);
+        return false;
+    }
+    //printf("_______2________\n");//NAME_MAX + 1
+    if (!valid_ptr ((void *) name))
+    {
+        //printf("_______3________\n");
+        exit (-1);
+    }
+    if (!valid_ptr(name + READDIR_MAX_LEN)) {
+        exit (-1);
+       //printf("_______4________\n");
+    }
+    struct file **fds = thread_current ()->fd_table;
+    if (fds[fd] == NULL)
+    {
+       // printf("_______5________\n");
+        return false;
+    }
+    sema_down (&filesys_mutex);
+    //printf("dir try toopen___\n");
+    //struct inode *in=file_get_inode();
+    //printf("inode->open_cnt is_%d__\n",in->open_cnt);
+    struct dir *dir=fds[fd]->dir;
+    //printf("inode->open_cnt is_%d__\n",in->open_cnt);
+    //if(dir!=NULL)
+    //printf("dir IS NOT NULL__________\n");
+   //dir_print_dir(dir);
+    bool suc = dir_readdir (dir, name);
+    /*
+    if(suc)
+        printf("dir_readdir sec______________%s__\n",name);
+    else
+       printf("dir_readdir fail________________\n");
+       */
+   // printf("inode->open_cnt is_%d__\n",in->open_cnt);
+  //  printf("inode->open_cnt is_%d__\n",in->open_cnt);
+    sema_up (&filesys_mutex);
+
+    return suc;
+}
+
+bool mkdir(char *dir){
+    //;
+    if (!valid_ptr ((void *) dir) )
+    {
+        //printf("mkdir(char *dir) fail________________\n");
+        exit (-1);
+    }
+    sema_down (&filesys_mutex);
+
+    bool suc = filesys_mkdir(dir);
+    sema_up (&filesys_mutex);
+   // if(!suc)
+    //printf("mkdir(char *dir) fail________________\n");
+    //else
+     //   printf("mkdir(char *dir) suc_______________\n");
+    return suc;
+}
+
+bool chdir(char *dir){
+    if (!valid_ptr ((void *) dir))
+    {
+        exit (-1);
+    }
+    sema_down (&filesys_mutex);
+    bool suc = filesys_chdir(dir);
+    sema_up (&filesys_mutex);
+    return suc;
 }
 
 void halt () { shutdown_power_off (); }
@@ -311,6 +469,7 @@ int open (const char *filename)
     }
 
   fds[fd] = file;
+    //printf("___open a file: %s__fd is__%d________________\n",filename,fd);
   return fd;
 }
 
@@ -385,7 +544,9 @@ int write (int fd, const void *buffer, unsigned size)
     {
       return 0;
     }
-
+    if(inode_get_directory(file_get_inode(file))){
+        return -1;
+    }
   sema_down (&filesys_mutex);
   unsigned bytes_written = file_write (file, buffer, size);
   sema_up (&filesys_mutex);

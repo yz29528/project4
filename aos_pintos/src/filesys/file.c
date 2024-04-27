@@ -38,6 +38,10 @@ void file_close (struct file *file)
   if (file != NULL)
     {
       file_allow_write (file);
+#ifdef FILESYS
+      free(file->dir);
+#endif
+
       inode_close (file->inode);
       free (file);
     }
@@ -143,3 +147,7 @@ off_t file_tell (struct file *file)
   ASSERT (file != NULL);
   return file->pos;
 }
+
+#ifdef FILESYS
+
+#endif

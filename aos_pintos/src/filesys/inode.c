@@ -1,8 +1,9 @@
-#include "filesys/inode.h"
+
 #include <list.h>
 #include <debug.h>
 #include <round.h>
 #include <string.h>
+#include "filesys/inode.h"
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
@@ -12,7 +13,6 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 #define TABLE_SIZE 128
-#define NULL_SECTOR -1
 #define CACHE_SIZE 64
 static char empty[BLOCK_SECTOR_SIZE];
 static char zero[BLOCK_SECTOR_SIZE];
@@ -110,17 +110,6 @@ void cache_done () {
 }
 
 
-/* On-disk inode.
-   Must be exactly BLOCK_SECTOR_SIZE bytes long. */
-struct inode_disk
-{
-  block_sector_t table; /* BLOCK_SECTOR_TABLE. */
-  off_t length;         /* File size in bytes. */
-  unsigned magic;       /* Magic number. */
-  bool is_symlink;      /* True if symbolic link, false otherwise. */
-  bool is_directory;    /* True if directory, false otherwise. */
-  uint8_t unused[498];  /* Not used. */
-};
 
 /* Map the pos into table_index
 */
@@ -145,15 +134,7 @@ static inline size_t bytes_to_sectors (off_t size)
 }
 
 /* In-memory inode. */
-struct inode
-{
-  struct list_elem elem;  /* Element in inode list. */
-  block_sector_t sector;  /* Sector number of disk location. */
-  int open_cnt;           /* Number of openers. */
-  bool removed;           /* True if deleted, false otherwise. */
-  int deny_write_cnt;     /* 0: writes ok, >0: deny writes. */
-  struct inode_disk data; /* Inode content. */
-};
+
 block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write);
 /*
  * Writing far beyond EOF can cause many blocks to be entirely zero.
@@ -202,7 +183,8 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
     /*    */
      if(tier1_table[t1]==NULL_SECTOR){
          if(!free_map_allocate (1, &tier1_table[t1])){
-             PANIC ("free_map_allocate for &tier1_table[t1] fails" );
+             return NULL_SECTOR;
+             //PANIC ("free_map_allocate for &tier1_table[t1] fails" );
          }
          //printf("__create_tier1_table___t1 is__%d___\n",t1);
              cache_write (fs_device, tier1_table[t1], empty);
@@ -216,7 +198,8 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
     /*    */
     if(tier2_table[t2]==NULL_SECTOR){
         if(!free_map_allocate (1, &tier2_table[t2])){
-            PANIC ("free_map_allocate for &tier1_table[t1] fails" );
+            return NULL_SECTOR;
+           // PANIC ("free_map_allocate for &tier1_table[t1] fails" );
         }
        // printf("__create_tier2_table__t1__is___%d__t2 is__%d___\n",t1,t2);
             cache_write (fs_device, tier2_table[t2], zero);
@@ -290,7 +273,7 @@ bool inode_create (block_sector_t sector, off_t length)
                       free(tier1_table);
                       free(tier2_table);
                       free(disk_inode);
-                      printf("________tier1_table_[%d] fail\n", i);
+                      //printf("________tier1_table_[%d] fail\n", i);
                       return false;
                   }
 
@@ -302,7 +285,7 @@ bool inode_create (block_sector_t sector, off_t length)
                           free(tier1_table);
                           free(tier2_table);
                           free(disk_inode);
-                          printf("_______tier1_table_[%d]___tier2_table_[%d] fail\n", i, j);
+                          //printf("_______tier1_table_[%d]___tier2_table_[%d] fail\n", i, j);
                           return false;
                       }
                       cache_write(fs_device, tier2_table[j], zero);
@@ -516,6 +499,10 @@ off_t inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     {
       /* Sector to write, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset,true);
+      if(sector_idx==NULL_SECTOR){
+          return NULL_SECTOR;
+      }
+
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -594,4 +581,17 @@ void inode_set_symlink (struct inode *inode, bool is_symlink)
 {
   inode->data.is_symlink = is_symlink;
   cache_write (fs_device, inode->sector, &inode->data);
+}
+
+void inode_set_directory (struct inode *inode)
+{
+    inode->data.is_directory = true;
+    cache_write (fs_device,inode->sector, &inode->data);
+}
+
+bool inode_get_directory (struct inode *inode){
+    return inode->data.is_directory;
+}
+int inode_get_sector(struct inode *inode){
+    return (int)inode->sector;
 }
