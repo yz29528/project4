@@ -549,6 +549,9 @@ int write (int fd, const void *buffer, unsigned size)
     }
   sema_down (&filesys_mutex);
   unsigned bytes_written = file_write (file, buffer, size);
+  //if(bytes_written>size){
+   //   printf("___write fails____%s________\n",file);
+ // }
   sema_up (&filesys_mutex);
   return bytes_written;
 }

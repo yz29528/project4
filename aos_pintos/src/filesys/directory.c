@@ -341,7 +341,7 @@ bool dir_check_and_remove(struct dir* cur_dir, char* name){
     ASSERT(cur_dir != NULL&&name != NULL && strlen(name) >= 0)
     struct inode* inode = NULL;
 
-    bool debug= true;
+    bool debug= !true;
 
     if (!dir_lookup(cur_dir, name, &inode)){
         if(debug)printf("__!dir_lookup(cur_dir, name, &inode)r______________\n");
@@ -352,14 +352,14 @@ bool dir_check_and_remove(struct dir* cur_dir, char* name){
         if(debug)printf("__inode == NULL)_______\n");
         return false;
     }
-    if (inode->open_cnt>1) {
 
-        if(debug)printf("__inode->open_cnt>0_______\n");
-        return false;
-    }
     if (inode_get_directory(inode)) {
         if(debug)printf("__remove adir_______%s_______\n",name);
+        if (inode->open_cnt>1) {
 
+            if(debug)printf("__inode->open_cnt>0_______\n");
+            return false;
+        }
         //If you want to delete a dir the dir should not be cur dir
         if (inode_get_inumber(inode) ==
                 inode_get_inumber(dir_get_inode(thread_current()->cur_dir)))

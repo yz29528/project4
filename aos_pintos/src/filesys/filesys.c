@@ -130,7 +130,7 @@ struct file* ret=NULL;
   }else if(parse_path(name, &sup_dir, &file_name, &is_directory)){
 
             //dir_print_dir(sup_dir);
-      printf("__open_path is__%s___name is_%s_\n",name,file_name);
+      //printf("__open_path is__%s___name is_%s_\n",name,file_name);
             struct dir *tmp_dir=dir_open_subdir(sup_dir, file_name);
     if (tmp_dir!=NULL){
        ret=file_open(inode_reopen(dir_get_inode(tmp_dir)));
