@@ -246,7 +246,7 @@ bool isdir (int fd){
 }
 
 int inumber (int fd){
-    if (fd >= MAX_OPEN_FILES || fd == 1||fd==2 || fd < 0)
+    if (fd >= MAX_OPEN_FILES || fd < 0)
     {
         return false;
     }
