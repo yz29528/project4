@@ -143,6 +143,18 @@ struct file* ret=NULL;
     }
 
  }
+   if (ret!=NULL && inode_get_symlink (file_get_inode(ret)))
+    {
+        char target[15];
+        inode_read_at (file_get_inode(ret), target, NAME_LEN + 1, 0);
+        dir_close(sup_dir);
+        //printf("___open a file: %s__address is__%p________________\n",file_name,ret);
+        free(file_name);
+        file_close(ret);
+        return filesys_open (target);
+    }
+
+
 dir_close(sup_dir);
   //printf("___open a file: %s__address is__%p________________\n",file_name,ret);
  free(file_name);
@@ -212,6 +224,21 @@ bool filesys_symlink (char *target, char *linkpath)
     file_close (symlink);
     return success;
 }
+
+int filesys_stat(char *pathname, void *buf){
+    bool is_directory;
+    int ret=-1;
+    struct dir *sup_dir=NULL;
+    char *file_name = (char *) malloc(NAME_LEN + 1);
+    if(!is_root(pathname)&&parse_path(pathname, &sup_dir, &file_name, &is_directory)){
+        struct file* file=dir_open_subfile(sup_dir, file_name);
+    //struct stat *stat = malloc (sizeof (struct stat));
+        ret= inode_stat(file_get_inode(file),buf);
+        file_close(file);
+    //memcpy (buf, stat, sizeof (struct stat));
+    }
+    return ret;
+};
 
 /* Formats the file system. */
 static void do_format (void)

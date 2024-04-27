@@ -4,7 +4,7 @@
 #include <round.h>
 #include <string.h>
 #include "filesys/inode.h"
-#include "filesys/filesys.h"
+//#include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
@@ -13,7 +13,7 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 #define TABLE_SIZE 128
-#define CACHE_SIZE 64
+#define CACHE_SIZE 128
 static char empty[BLOCK_SECTOR_SIZE];
 static char zero[BLOCK_SECTOR_SIZE];
 
@@ -144,6 +144,17 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write);
  * You must adopt this strategy and implement sparse files.
  * */
 
+int inode_stat (struct inode *inode,struct stat* stat) {
+    /*size_t logical_size;             The logical file size of a file. */
+    /*size_t physical_size;            The physical file size of a file. */
+    /*block_sector_t inode_number;     The inode number of a file. */
+    /* blkcnt_t blocks;                 Number of blocks allocated. */
+    stat->inode_number=inode->sector;
+    stat->logical_size=inode->data.length;
+    stat->physical_size=inode->data.physical_size;
+    stat->blocks=inode->data.blocks;
+    return 0;
+}
 
 /* Returns the block device sector that contains byte offset POS
    within INODE.
@@ -155,7 +166,7 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
 
     block_sector_t *tier1_table = calloc(TABLE_SIZE, sizeof(block_sector_t));
     block_sector_t *tier2_table = calloc(TABLE_SIZE, sizeof(block_sector_t));
-
+    //if(pos<inode->data.initial_length){inode->data.blocks++;}
     if (pos >= inode->data.length) {
         if (!write) {
             free(tier1_table);
@@ -164,28 +175,19 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
         }
         //extend_file(inode,pos,tier2_table,tier2_table);
         inode->data.length = pos + 1;
-        cache_write(fs_device,inode->sector, &inode->data);
+
     }
 
-    /*
-       if(inode->data.table == NULL_SECTOR){
-           if(!free_map_allocate (1, &inode->data.table)){
-               PANIC ("free_map_allocate for &inode->data.table fails" );
-           }
-               cache_write (fs_device, inode->data.table, empty);
-               cache_write (fs_device, inode->sector, &inode->data);
-       }
-    */
-       cache_read (fs_device, inode->data.table, tier1_table);
 
+       cache_read (fs_device, inode->data.table, tier1_table);
        off_t t1=byte_to_tier1_index(pos);
       // printf("__pos:%d___t1 is__%d___\n",pos,t1);
     /*    */
      if(tier1_table[t1]==NULL_SECTOR){
          if(!free_map_allocate (1, &tier1_table[t1])){
              return NULL_SECTOR;
-             //PANIC ("free_map_allocate for &tier1_table[t1] fails" );
          }
+
          //printf("__create_tier1_table___t1 is__%d___\n",t1);
              cache_write (fs_device, tier1_table[t1], empty);
              cache_write (fs_device, inode->data.table, tier1_table);
@@ -197,10 +199,10 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
     //printf("__pos:%d___t2 is__%d___\n",pos,t2);
     /*    */
     if(tier2_table[t2]==NULL_SECTOR){
-        if(!free_map_allocate (1, &tier2_table[t2])){
+        if(!free_map_allocate (1, &tier2_table[t2])) {
             return NULL_SECTOR;
-           // PANIC ("free_map_allocate for &tier1_table[t1] fails" );
         }
+        inode->data.blocks++;
        // printf("__create_tier2_table__t1__is___%d__t2 is__%d___\n",t1,t2);
             cache_write (fs_device, tier2_table[t2], zero);
             cache_write (fs_device, tier1_table[t1], tier2_table);
@@ -214,6 +216,7 @@ block_sector_t byte_to_sector (struct inode *inode, off_t pos,bool write)
     //printf("__pos:%d___sector is__%d___\n",pos,sector);
     free(tier1_table);
     free(tier2_table);
+    cache_write(fs_device,inode->sector, &inode->data);
     return sector;
 }
 
@@ -247,62 +250,68 @@ bool inode_create (block_sector_t sector, off_t length)
   if (disk_inode != NULL) {
       //size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
+      disk_inode->initial_length= length;
       disk_inode->magic = INODE_MAGIC;
       disk_inode->is_symlink = false;
       disk_inode->is_directory = false;
       //disk_inode->table = NULL_SECTOR;
+      disk_inode->physical_size=0;
+      disk_inode->blocks=0;
       if (free_map_allocate(1, &disk_inode->table)) {
-          cache_write(fs_device, sector, disk_inode);
 
 
-          if (length > 0) {
-              block_sector_t *tier1_table = calloc(TABLE_SIZE, sizeof(block_sector_t));
-              block_sector_t *tier2_table = calloc(TABLE_SIZE, sizeof(block_sector_t));
-              off_t tier1_table_end = byte_to_tier1_index(length - 1);
-              off_t tier2_table_end = byte_to_tier2_index(length - 1);
-              int i, j;
+             if (length > 0) {
+                 block_sector_t *tier1_table = calloc(TABLE_SIZE, sizeof(block_sector_t));
+                 block_sector_t *tier2_table = calloc(TABLE_SIZE, sizeof(block_sector_t));
+                 off_t tier1_table_end = byte_to_tier1_index(length - 1);
+                 off_t tier2_table_end = byte_to_tier2_index(length - 1);
+                 int i, j;
 
 
-              memset(tier1_table, NULL_SECTOR, TABLE_SIZE * sizeof(block_sector_t));
+                 memset(tier1_table, NULL_SECTOR, TABLE_SIZE * sizeof(block_sector_t));
 
-              for (i = 0; i <= tier1_table_end; i++) {
-                  // off_t r = (i == t1_t ? t2_t : TABLE_SIZE - 1);
-                  off_t r = i == tier1_table_end ? tier2_table_end : (TABLE_SIZE - 1);//KEY
+                 for (i = 0; i <= tier1_table_end; i++) {
+                     // off_t r = (i == t1_t ? t2_t : TABLE_SIZE - 1);
+                     off_t r = i == tier1_table_end ? tier2_table_end : (TABLE_SIZE - 1);//KEY
 
-                  if (!free_map_allocate(1, &tier1_table[i])) {
-                      free(tier1_table);
-                      free(tier2_table);
-                      free(disk_inode);
-                      //printf("________tier1_table_[%d] fail\n", i);
-                      return false;
-                  }
-
-
-                  memset(tier2_table, NULL_SECTOR, TABLE_SIZE * sizeof(block_sector_t));
-
-                  for (j = 0; j <= r; j++) {
-                      if (!free_map_allocate(1, &tier2_table[j])) {
-                          free(tier1_table);
-                          free(tier2_table);
-                          free(disk_inode);
-                          //printf("_______tier1_table_[%d]___tier2_table_[%d] fail\n", i, j);
-                          return false;
-                      }
-                      cache_write(fs_device, tier2_table[j], zero);
-                  }
-
-                  cache_write(fs_device, tier1_table[i], tier2_table);
-              }
+                     if (!free_map_allocate(1, &tier1_table[i])) {
+                         free(tier1_table);
+                         free(tier2_table);
+                         free(disk_inode);
+                         //printf("________tier1_table_[%d] fail\n", i);
+                         return false;
+                     }
 
 
-              cache_write(fs_device, disk_inode->table, tier1_table);
-              free(tier1_table);
-              free(tier2_table);
-          } else {
-              cache_write(fs_device, disk_inode->table, empty);
-          }
+                     memset(tier2_table, NULL_SECTOR, TABLE_SIZE * sizeof(block_sector_t));
+
+                     for (j = 0; j <= r; j++) {
+                         if (!free_map_allocate(1, &tier2_table[j])) {
+                             free(tier1_table);
+                             free(tier2_table);
+                             free(disk_inode);
+                             //printf("_______tier1_table_[%d]___tier2_table_[%d] fail\n", i, j);
+                             return false;
+                         }
+                         cache_write(fs_device, tier2_table[j], zero);
+                     }
+
+                     cache_write(fs_device, tier1_table[i], tier2_table);
+                 }
+
+
+                 cache_write(fs_device, disk_inode->table, tier1_table);
+                 free(tier1_table);
+                 free(tier2_table);
+             } else {
+                 cache_write(fs_device, disk_inode->table, empty);
+             }
+
+
           success = true;
       }
+
+      cache_write(fs_device, sector, disk_inode);
       free(disk_inode);
 
   }
@@ -545,9 +554,11 @@ off_t inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       size -= chunk_size;
       offset += chunk_size;
       bytes_written += chunk_size;
+      inode->data.blocks++;
     }
   free (bounce);
-
+    inode->data.physical_size+=bytes_written;
+    cache_write (fs_device,inode->sector, &inode->data);
   return bytes_written;
 }
 

@@ -23,5 +23,6 @@ bool mkdir(char *dir);
 bool chdir(char *dir);
 bool readdir (int fd,char *name);
 int inumber (int fd);
+int stat (char *pathname, void *buf);
 bool isdir (int fd);
 #endif /* userprog/syscall.h */

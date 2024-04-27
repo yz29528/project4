@@ -37,4 +37,5 @@ bool filesys_symlink (char *target, char *linkpath);
 bool filesys_chdir (const char * name);
 bool filesys_readdir (const char * dir);
 bool is_root(const char *name);
+int filesys_stat(char *pathname, void *buf);
 #endif /* filesys/filesys.h */

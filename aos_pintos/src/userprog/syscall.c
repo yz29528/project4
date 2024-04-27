@@ -217,11 +217,20 @@ static void syscall_handler (struct intr_frame *f UNUSED)
             int fd_inumber = *((int *) f->esp + 1);
             f->eax = inumber(fd_inumber);
             break;
+        case SYS_STAT:
+            if (check_args (f->esp, 2))
+            {
+                exit (-1);
+            }
+            char* path_stat = *((char **) f->esp + 1);
+            void *buffer_stat = *((void **) f->esp + 2);
+            f->eax = stat(path_stat,buffer_stat);
+            break;
     }
 }
 
 bool isdir (int fd){
-    if (fd >= MAX_OPEN_FILES || fd == 1||fd==2 || fd < 0)
+    if (fd >= MAX_OPEN_FILES || fd < 0)
     {
         return false;
     }
@@ -254,8 +263,21 @@ int inumber (int fd){
 
 int stat (char *pathname, void *buf){
 
-
-    return -1;
+    /*printf("_______2________\n");//NAME_MAX + 1
+    if (!valid_ptr ((void *) pathname)&&!valid_ptr(name + READDIR_MAX_LEN))
+    {
+        exit (-1);
+    }
+    if (!valid_ptr(name + READDIR_MAX_LEN)) {
+        exit (-1);
+        //printf("_______4________\n");
+    }
+*/
+    int ret=-1;
+    sema_down (&filesys_mutex);
+    ret=filesys_stat(pathname,buf);
+    sema_up (&filesys_mutex);
+    return ret;
 }
 
 
@@ -419,7 +441,9 @@ bool create (const char *file, unsigned initial_size)
     {
       exit (-1);
     }
-
+    if(strlen(file)>READDIR_MAX_LEN){
+        return false;
+    }
   sema_down (&filesys_mutex);
   bool opened = filesys_create (file, initial_size);
   sema_up (&filesys_mutex);

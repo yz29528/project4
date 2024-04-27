@@ -6,7 +6,7 @@
 #include "devices/block.h"
 #include "lib/kernel/list.h"
 #include "lib/kernel/hash.h"
-
+#include "filesys/filesys.h"
 #define NULL_SECTOR -1
 struct bitmap;
 
@@ -16,10 +16,13 @@ struct inode_disk
 {
     block_sector_t table; /* BLOCK_SECTOR_TABLE. */
     off_t length;         /* File size in bytes. */
+    off_t initial_length;
+    uint32_t physical_size;           /* The physical file size of a file. */
+    uint32_t blocks;                /* Number of blocks allocated. */
     unsigned magic;       /* Magic number. */
     bool is_symlink;      /* True if symbolic link, false otherwise. */
     bool is_directory;    /* True if directory, false otherwise. */
-    uint8_t unused[498];  /* Not used. */
+    uint8_t unused[486];  /* Not used. */
 };
 struct cache_entry{
     block_sector_t sector;
@@ -59,4 +62,5 @@ void inode_set_symlink (struct inode *inode, bool is_symlink);
 void inode_set_directory (struct inode *inode);
 bool inode_get_directory (struct inode *inode);
 int inode_get_sector(struct inode *inode);
+int inode_stat (struct inode *inode,struct stat* stat);
 #endif /* filesys/inode.h */
