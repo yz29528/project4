@@ -247,6 +247,7 @@ bool dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 }
 bool dir_print_dir (struct dir *dir )
 {
+    printf("tryna print");
     struct dir *dir_copy = dir_open(dir->inode);
     struct dir_entry e;
     char name[NAME_MAX + 1];
@@ -289,20 +290,34 @@ bool dir_create_subfile(struct dir* cur_dir, char* name, off_t initial_size){
 }
 
 
-struct file* dir_open_subfile(struct dir* cur_dir, char* name){
-    ASSERT(cur_dir != NULL&&name != NULL)
-    if (strlen(name) == 0)
-        return NULL;
-    struct inode* inode = NULL;
-    if (!dir_lookup(cur_dir, name, &inode) || inode == NULL)
-        return NULL;
-
-
-    if (inode_get_directory(inode)){
-        inode_close(inode);
+struct file* dir_open_subfile(struct dir* cur_dir, char* name) {
+    if (cur_dir == NULL || name == NULL || strlen(name) == 0) {
+        // Handle invalid inputs
         return NULL;
     }
-    return  file_open(inode);
+
+    struct inode* inode = NULL;
+    if (!dir_lookup(cur_dir, name, &inode)) {
+        // dir_lookup failed
+        return NULL;
+    }
+
+    if (inode == NULL || inode_get_directory(inode)) {
+        // Handle invalid inode or directory inode
+        if (inode != NULL) {
+            inode_close(inode);  // Close the inode to avoid memory leak
+        }
+        return NULL;
+    }
+
+    struct file* opened_file = file_open(inode);
+    if (opened_file == NULL) {
+        // Handle file_open failure
+        inode_close(inode);  // Close the inode to avoid memory leak
+        return NULL;
+    }
+
+    return opened_file;
 }
 
 struct dir* dir_open_subdir(struct dir* cur_dir, char* name){
